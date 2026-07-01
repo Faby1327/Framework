@@ -12,7 +12,7 @@ import java.lang.reflect.Method;
 public class FrontServlet extends HttpServlet {
 
     private List<Class<?>> controllers;
-    private HashMap<String, Mapping> urls;
+    private HashMap<HttpKey, Mapping> urls;
 
     @Override
     public void init() throws ServletException {
@@ -36,34 +36,49 @@ public class FrontServlet extends HttpServlet {
                         Controller.class,
                         ScanType.CLASS
                 );
+
         urls = new HashMap<>();
 
-        for(Class<?> c : controllers)
-        {
-        Method[] methodes =
-                c.getDeclaredMethods();
+        for (Class<?> c : controllers) {
 
-        for(Method m : methodes)
-        {
-                if(m.isAnnotationPresent(Url.class))
-                {
-                Url url =
-                        m.getAnnotation(
-                                Url.class
+            Method[] methods = c.getDeclaredMethods();
+
+            for (Method m : methods) {
+
+                if (m.isAnnotationPresent(Url.class)) {
+
+                    Url url = m.getAnnotation(Url.class);
+
+                    HttpKey key = new HttpKey(
+                            url.value(),
+                            url.method()
+                    );
+
+                    if (urls.containsKey(key)) {
+                        throw new ServletException(
+                                "URL dupliquée : "
+                                + key.getMethod() + " " + key.getUrl()
+                                + "\nDéjà associée à : "
+                                + urls.get(key).getClasse().getName()
+                                + "."
+                                + urls.get(key).getMethode().getName()
+                                + "\nNouvelle méthode : "
+                                + c.getName()
+                                + "."
+                                + m.getName()
                         );
+                    }
 
-                urls.put(
-                        url.value(),
-                        new Mapping(c, m)
-                );
+                    urls.put(
+                            key,
+                            new Mapping(c, m)
+                    );
                 }
+            }
         }
-        }
-
     }
 
-    @Override
-    protected void doGet(
+    private void processRequest(
             HttpServletRequest req,
             HttpServletResponse resp)
             throws ServletException, IOException {
@@ -73,57 +88,70 @@ public class FrontServlet extends HttpServlet {
         for (Class<?> c : controllers) {
             resp.getWriter().println(c.getName());
         }
-        String url =
-        req.getRequestURI();
 
-        String contexte =
-                req.getContextPath();
+        String url = req.getRequestURI()
+                .substring(req.getContextPath().length());
 
-        url =
-                url.substring(
-                        contexte.length()
-                );
+        String method = req.getMethod();
 
-        Mapping mapping =
-        urls.get(url);
+        HttpKey key = new HttpKey(url, method);
 
+        Mapping mapping = urls.get(key);
 
-        if(mapping != null)
-        {
-        resp.getWriter().println(
-                "Classe : "
-                + mapping.getClasse().getName()
-        );
+        if (mapping != null) {
 
-        resp.getWriter().println(
-                "Méthode : "
-                + mapping.getMethode().getName()
-        );
-        }
-        else
-        {
-        resp.getWriter().println(
-                "URL introuvable.\n"
-        );
+            resp.getWriter().println(
+                    "Classe : "
+                    + mapping.getClasse().getName()
+            );
 
-        resp.getWriter().println(
-                "Les URL disponibles :\n"
-        );
+            resp.getWriter().println(
+                    "Méthode : "
+                    + mapping.getMethode().getName()
+            );
 
-        for(String cle : urls.keySet())
-        {
+        } else {
+
+            resp.getWriter().println(
+                    "URL introuvable.\n"
+            );
+
+            resp.getWriter().println(
+                    "Les URL disponibles :\n"
+            );
+
+            for (HttpKey cle : urls.keySet()) {
+
                 Mapping m = urls.get(cle);
 
                 resp.getWriter().println(
-                        cle
+                        cle.getMethod()
+                        + " "
+                        + cle.getUrl()
                         + " -> "
                         + m.getClasse().getName()
                         + "."
                         + m.getMethode().getName()
                 );
+            }
         }
-        }
+    }
 
+    @Override
+    protected void doGet(
+            HttpServletRequest req,
+            HttpServletResponse resp)
+            throws ServletException, IOException {
 
+        processRequest(req, resp);
+    }
+
+    @Override
+    protected void doPost(
+            HttpServletRequest req,
+            HttpServletResponse resp)
+            throws ServletException, IOException {
+
+        processRequest(req, resp);
     }
 }
