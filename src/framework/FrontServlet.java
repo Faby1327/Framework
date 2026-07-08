@@ -100,16 +100,24 @@ public class FrontServlet extends HttpServlet {
 
         if (mapping != null) {
 
-            resp.getWriter().println(
-                    "Classe : "
-                    + mapping.getClasse().getName()
-            );
+        try {
 
-            resp.getWriter().println(
-                    "Méthode : "
-                    + mapping.getMethode().getName()
-            );
+                Object controller =
+                        mapping.getClasse()
+                        .getDeclaredConstructor()
+                        .newInstance();
 
+                Object resultat =
+                        mapping.getMethode()
+                        .invoke(controller);
+
+                if (resultat != null) {
+                resp.getWriter().println(resultat);
+                }
+
+        } catch (Exception e) {
+                throw new ServletException(e);
+        }
         } else {
 
             resp.getWriter().println(
