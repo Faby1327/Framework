@@ -110,10 +110,33 @@ public class FrontServlet extends HttpServlet {
                 Object resultat =
                         mapping.getMethode()
                         .invoke(controller);
+                if (resultat instanceof ModelAndView) {
+                    ModelAndView mv = (ModelAndView) resultat;
+                    for(String key1 : mv.getData().keySet())
+                        {
 
-                if (resultat != null) {
+                        req.setAttribute(
+                                key1,
+                                mv.getData().get(key1)
+                        );
+
+                        }
+                        String prefix = getInitParameter("view-prefix");
+
+                        String suffix = getInitParameter("view-suffix");
+                        String chemin =
+                                        prefix
+                                        + mv.getView()
+                                        + suffix;
+                        RequestDispatcher dispatcher =
+                        req.getRequestDispatcher(chemin);
+
+
+                dispatcher.forward(req,resp);
+                } else {
                 resp.getWriter().println(resultat);
                 }
+
 
         } catch (Exception e) {
                 throw new ServletException(e);
