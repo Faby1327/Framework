@@ -6,9 +6,30 @@ import jakarta.servlet.*;
 import java.io.IOException;
 import java.util.List;
 import java.util.HashMap;
+import com.google.gson.Gson;
 
 public class FrontServlet extends HttpServlet {
 
+        private void envoyerJson(
+                Object resultat,
+                HttpServletResponse resp)
+                throws IOException {
+
+        resp.setContentType("application/json");
+
+        if (resultat instanceof String) {
+
+                resp.getWriter().println(resultat);
+
+        } else {
+                Gson gson = new Gson();
+
+                String json = gson.toJson(resultat);
+
+                resp.getWriter().println(json);
+        }
+        }
+        
     private void processRequest(
             HttpServletRequest req,
             HttpServletResponse resp)
@@ -49,7 +70,10 @@ public class FrontServlet extends HttpServlet {
                 Object resultat =
                         mapping.getMethode()
                         .invoke(controller);
-                if (resultat instanceof ModelAndView) {
+                if (mapping.getMethode().isAnnotationPresent(Json.class)) {
+                        envoyerJson(resultat, resp);
+
+                } else if (resultat instanceof ModelAndView) {
                     ModelAndView mv = (ModelAndView) resultat;
                     for(String key1 : mv.getData().keySet())
                         {
