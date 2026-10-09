@@ -8,6 +8,7 @@ import java.lang.reflect.Parameter;
 import java.util.List;
 import java.util.HashMap;
 import com.google.gson.Gson;
+import java.lang.reflect.Field;
 
 public class FrontServlet extends HttpServlet {
 
@@ -68,11 +69,11 @@ public class FrontServlet extends HttpServlet {
                         .getDeclaredConstructor()
                         .newInstance();
 
-                // Récupérer la méthode du controller
+                // méthode du controller
                 java.lang.reflect.Method methodController =
                         mapping.getMethode();
 
-                // Récupérer les paramètres de la méthode
+                // paramètres de la méthode
                 Parameter[] parameters =
                         methodController.getParameters();
 
@@ -83,27 +84,97 @@ public class FrontServlet extends HttpServlet {
                 // Construire les arguments
                 for (int i = 0; i < parameters.length; i++) {
 
-                    Parameter parameter =
-                            parameters[i];
+                    Parameter parameter = parameters[i];
 
-                    String nomParametre =
-                            parameter.getName();
+                    // Nom et type du paramètre de la méthode
+                    String nomParametre = parameter.getName();
 
-                    String valeur =
-                            req.getParameter(nomParametre);
+                    Class<?> typeParametre = parameter.getType();
 
-                    if (parameter.getType() == String.class) {
+                    // paramètre String
+                    if (typeParametre == String.class) {
 
-                        arguments[i] = valeur;
+                        arguments[i] =
+                                req.getParameter(nomParametre);
 
-                        } else if (parameter.getType() == int.class) {
+                    // paramètre int
+                    } else if (typeParametre == int.class) {
 
-                        if (valeur != null) {
-                                arguments[i] = Integer.parseInt(valeur);
+                        String valeur =
+                                req.getParameter(nomParametre);
+
+                        if (valeur != null && !valeur.isEmpty()) {
+                            arguments[i] =
+                                    Integer.parseInt(valeur);
                         } else {
-                                arguments[i] = 0;
+                            arguments[i] = 0;
                         }
+
+                    // paramètre objet
+                    } else {
+
+                        // instance de la classe
+                        Object objet =
+                                typeParametre
+                                        .getDeclaredConstructor()
+                                        .newInstance();
+
+                        // Parcourir les propriétés de la classe
+                        Field[] champs =
+                                typeParametre.getDeclaredFields();
+
+                        for (Field champ : champs) {
+
+                            String nomChamp = champ.getName();
+
+                            Class<?> typeChamp =
+                                    champ.getType();
+
+                            String valeur =
+                                    req.getParameter(nomChamp);
+
+                            
+                            if (valeur == null || valeur.isEmpty()) {
+                                continue;
+                            }
+
+                            Object valeurConvertie;
+
+                            // Convertir selon le type de la propriété
+                            if (typeChamp == String.class) {
+
+                                valeurConvertie = valeur;
+
+                            } else if (typeChamp == int.class) {
+
+                                valeurConvertie =
+                                        Integer.parseInt(valeur);
+
+                            } else {
+                                continue;
+                            }
+
+                            //nom du setter
+                            String nomSetter =
+                                    "set"
+                                    + Character.toUpperCase(
+                                            nomChamp.charAt(0))
+                                    + nomChamp.substring(1);
+
+                            // setter correspondant
+                            java.lang.reflect.Method setter =
+                                    typeParametre.getMethod(
+                                            nomSetter,
+                                            typeChamp
+                                    );
+
+                            // Appeler le setter 
+                            setter.invoke(objet, valeurConvertie);
                         }
+
+                        // Placer l'objet construit dans les arguments
+                        arguments[i] = objet;
+                    }
                 }
 
                 // Appeler la méthode avec les arguments
