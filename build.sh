@@ -5,6 +5,7 @@ mkdir build
 find src -name "*.java" > sources.txt
 
 javac \
+    -parameters \
     -cp "lib/servlet-api.jar:lib/gson-2.10.1.jar" \
     -d build \
     @sources.txt
