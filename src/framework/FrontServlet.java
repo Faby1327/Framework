@@ -1,15 +1,20 @@
+
 package framework;
 
 import jakarta.servlet.http.*;
 import jakarta.servlet.*;
+import jakarta.servlet.annotation.MultipartConfig;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.HashMap;
-import com.google.gson.Gson;
-import java.lang.reflect.Field;
 
+import com.google.gson.Gson;
+
+@MultipartConfig
 public class FrontServlet extends HttpServlet {
 
     private void envoyerJson(
@@ -24,6 +29,7 @@ public class FrontServlet extends HttpServlet {
             resp.getWriter().println(resultat);
 
         } else {
+
             Gson gson = new Gson();
 
             String json = gson.toJson(resultat);
@@ -66,14 +72,14 @@ public class FrontServlet extends HttpServlet {
 
                 Object controller =
                         mapping.getClasse()
-                        .getDeclaredConstructor()
-                        .newInstance();
+                                .getDeclaredConstructor()
+                                .newInstance();
 
-                // méthode du controller
+                // Méthode du controller
                 java.lang.reflect.Method methodController =
                         mapping.getMethode();
 
-                // paramètres de la méthode
+                // Paramètres de la méthode
                 Parameter[] parameters =
                         methodController.getParameters();
 
@@ -86,34 +92,105 @@ public class FrontServlet extends HttpServlet {
 
                     Parameter parameter = parameters[i];
 
-                    // Nom et type du paramètre de la méthode
+                    // Nom et type du paramètre
                     String nomParametre = parameter.getName();
 
                     Class<?> typeParametre = parameter.getType();
 
-                    // paramètre String
-                    if (typeParametre == String.class) {
+                    // Paramètre MapFile : réception d'un fichier
+                    if (typeParametre == MapFile.class) {
+
+                        Part part = req.getPart(nomParametre);
+
+                        if (part == null || part.getSize() == 0) {
+
+                            arguments[i] = null;
+
+                        } else {
+
+                            String nomFichier =
+                                    part.getSubmittedFileName();
+
+                            if (nomFichier != null) {
+
+                                nomFichier =
+                                        nomFichier.replace('\\', '/');
+
+                                nomFichier =
+                                        nomFichier.substring(
+                                                nomFichier.lastIndexOf('/') + 1
+                                        );
+
+                            } else {
+
+                                nomFichier = "fichier";
+                            }
+
+                            int positionPoint =
+                                    nomFichier.lastIndexOf('.');
+
+                            String nom;
+                            String extension;
+
+                            if (positionPoint > 0) {
+
+                                nom = nomFichier.substring(
+                                        0, positionPoint
+                                );
+
+                                extension = nomFichier.substring(
+                                        positionPoint
+                                );
+
+                            } else {
+
+                                nom = nomFichier;
+                                extension = "";
+                            }
+
+                            byte[] contenu;
+
+                            try (InputStream input =
+                                         part.getInputStream()) {
+
+                                contenu = input.readAllBytes();
+                            }
+
+                            MapFile fichier = new MapFile(
+                                    nom,
+                                    extension,
+                                    contenu
+                            );
+
+                            arguments[i] = fichier;
+                        }
+
+                    // Paramètre String
+                    } else if (typeParametre == String.class) {
 
                         arguments[i] =
                                 req.getParameter(nomParametre);
 
-                    // paramètre int
+                    // Paramètre int
                     } else if (typeParametre == int.class) {
 
                         String valeur =
                                 req.getParameter(nomParametre);
 
                         if (valeur != null && !valeur.isEmpty()) {
+
                             arguments[i] =
                                     Integer.parseInt(valeur);
+
                         } else {
+
                             arguments[i] = 0;
                         }
 
-                    // paramètre objet
+                    // Paramètre objet : fonctionnement actuel conservé
                     } else {
 
-                        // instance de la classe
+                        // Créer une instance de la classe
                         Object objet =
                                 typeParametre
                                         .getDeclaredConstructor()
@@ -133,7 +210,6 @@ public class FrontServlet extends HttpServlet {
                             String valeur =
                                     req.getParameter(nomChamp);
 
-                            
                             if (valeur == null || valeur.isEmpty()) {
                                 continue;
                             }
@@ -151,24 +227,25 @@ public class FrontServlet extends HttpServlet {
                                         Integer.parseInt(valeur);
 
                             } else {
+
                                 continue;
                             }
 
-                            //nom du setter
+                            // Nom du setter
                             String nomSetter =
                                     "set"
                                     + Character.toUpperCase(
                                             nomChamp.charAt(0))
                                     + nomChamp.substring(1);
 
-                            // setter correspondant
+                            // Récupérer le setter correspondant
                             java.lang.reflect.Method setter =
                                     typeParametre.getMethod(
                                             nomSetter,
                                             typeChamp
                                     );
 
-                            // Appeler le setter 
+                            // Appeler le setter
                             setter.invoke(objet, valeurConvertie);
                         }
 
@@ -193,8 +270,7 @@ public class FrontServlet extends HttpServlet {
                     ModelAndView mv =
                             (ModelAndView) resultat;
 
-                    for (String key1 :
-                            mv.getData().keySet()) {
+                    for (String key1 : mv.getData().keySet()) {
 
                         req.setAttribute(
                                 key1,
@@ -230,13 +306,9 @@ public class FrontServlet extends HttpServlet {
 
         } else {
 
-            resp.getWriter().println(
-                    "URL introuvable.\n"
-            );
+            resp.getWriter().println("URL introuvable.\n");
 
-            resp.getWriter().println(
-                    "Les URL disponibles :\n"
-            );
+            resp.getWriter().println("Les URL disponibles :\n");
 
             for (HttpKey cle : urls.keySet()) {
 
