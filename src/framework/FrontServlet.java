@@ -111,7 +111,56 @@ public class FrontServlet extends HttpServlet {
                 }
 
                 // ------------------------------------
-                // 4. RECUPERER LES PARAMETRES
+                // 4. VERIFICATION DE L'AUTORISATION (ROLE)
+                // ------------------------------------
+
+                // Vérifier si la méthode possède @Autorisation
+                if (methodController.isAnnotationPresent(Autorisation.class)) {
+
+                    // Récupérer les informations de l'annotation
+                    Autorisation autorisation =
+                            methodController.getAnnotation(Autorisation.class);
+
+                    // Rôle nécessaire pour accéder à cette méthode
+                    String roleExige = autorisation.role();
+
+                    // Récupérer la session HTTP existante, sans en créer une
+                    HttpSession httpSession = req.getSession(false);
+
+                    // Récupérer notre session personnalisée
+                    Session session = null;
+
+                    if (httpSession != null) {
+                        session = (Session) httpSession.getAttribute("maSession");
+                    }
+
+                    // L'autorisation nécessite d'abord une connexion
+                    if (session == null || !session.contient("utilisateur")) {
+
+                        resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        resp.getWriter().println(
+                                "Accès refusé : vous devez être connecté."
+                        );
+                        return;
+                    }
+
+                    // Récupérer le rôle de l'utilisateur connecté
+                    String roleUtilisateur = (String) session.get("role");
+
+                    // Comparer le rôle de l'utilisateur au rôle exigé
+                    if (roleUtilisateur == null ||
+                            !roleExige.equals(roleUtilisateur)) {
+
+                        resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        resp.getWriter().println(
+                                "Accès interdit : vous n'avez pas le rôle nécessaire."
+                        );
+                        return;
+                    }
+                }
+
+                // ------------------------------------
+                // 5. RECUPERER LES PARAMETRES
                 // ------------------------------------
 
                 Parameter[] parameters =
@@ -324,7 +373,7 @@ public class FrontServlet extends HttpServlet {
                 }
 
                 // ------------------------------------
-                // 5. APPELER LA METHODE DU CONTROLLER
+                // 6. APPELER LA METHODE DU CONTROLLER
                 // ------------------------------------
 
                 Object resultat =
@@ -334,7 +383,7 @@ public class FrontServlet extends HttpServlet {
                         );
 
                 // ------------------------------------
-                // 6. TRAITER LE RESULTAT
+                // 7. TRAITER LE RESULTAT
                 // ------------------------------------
 
                 if (methodController.isAnnotationPresent(Json.class)) {
