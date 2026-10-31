@@ -25,10 +25,15 @@ public class FrontServlet extends HttpServlet {
         resp.setContentType("application/json;charset=UTF-8");
 
         if (resultat instanceof String) {
+
             resp.getWriter().println(resultat);
+
         } else {
+
             Gson gson = new Gson();
+
             String json = gson.toJson(resultat);
+
             resp.getWriter().println(json);
         }
     }
@@ -71,15 +76,52 @@ public class FrontServlet extends HttpServlet {
                 java.lang.reflect.Method methodController =
                         mapping.getMethode();
 
-                // 3. Récupérer les paramètres de la méthode
+                // ------------------------------------
+                // 3. VERIFICATION DE L'AUTHENTIFICATION
+                // ------------------------------------
+
+                // Vérifier si la méthode possède @Authentification
+                if (methodController.isAnnotationPresent(Authentification.class)) {
+
+                    // Récupérer la véritable session HTTP
+                    // Sans créer une nouvelle session
+                    HttpSession httpSession = req.getSession(false);
+
+                    // Préparer la variable Session personnalisée
+                    Session session = null;
+
+                    // Si la session HTTP existe
+                    if (httpSession != null) {
+
+                        // Récupérer notre objet Session
+                        session = (Session) httpSession.getAttribute("maSession");
+                    }
+
+                    // Vérifier si l'utilisateur est connecté
+                    if (session == null || !session.contient("utilisateur")) {
+
+                        resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+
+                        resp.getWriter().println(
+                                "Accès refusé : vous devez être connecté."
+                        );
+
+                        return;
+                    }
+                }
+
+                // ------------------------------------
+                // 4. RECUPERER LES PARAMETRES
+                // ------------------------------------
+
                 Parameter[] parameters =
                         methodController.getParameters();
 
-                // 4. Tableau qui contiendra les arguments
+                // Tableau qui contiendra les arguments
                 Object[] arguments =
                         new Object[parameters.length];
 
-                // 5. Construire les arguments
+                // Construire les arguments
                 for (int i = 0; i < parameters.length; i++) {
 
                     Parameter parameter = parameters[i];
@@ -218,11 +260,13 @@ public class FrontServlet extends HttpServlet {
                     // ------------------------------------
                     else {
 
+                        // Créer une instance de la classe
                         Object objet =
                                 typeParametre
                                         .getDeclaredConstructor()
                                         .newInstance();
 
+                        // Parcourir les propriétés de la classe
                         Field[] champs =
                                 typeParametre.getDeclaredFields();
 
@@ -241,6 +285,7 @@ public class FrontServlet extends HttpServlet {
 
                             Object valeurConvertie;
 
+                            // Convertir selon le type de la propriété
                             if (typeChamp == String.class) {
 
                                 valeurConvertie = valeur;
@@ -255,33 +300,43 @@ public class FrontServlet extends HttpServlet {
                                 continue;
                             }
 
+                            // Nom du setter
                             String nomSetter =
                                     "set"
                                     + Character.toUpperCase(
                                             nomChamp.charAt(0))
                                     + nomChamp.substring(1);
 
+                            // Récupérer le setter correspondant
                             java.lang.reflect.Method setter =
                                     typeParametre.getMethod(
                                             nomSetter,
                                             typeChamp
                                     );
 
+                            // Appeler le setter
                             setter.invoke(objet, valeurConvertie);
                         }
 
+                        // Placer l'objet construit dans les arguments
                         arguments[i] = objet;
                     }
                 }
 
-                // 6. Appeler la méthode du controller
+                // ------------------------------------
+                // 5. APPELER LA METHODE DU CONTROLLER
+                // ------------------------------------
+
                 Object resultat =
                         methodController.invoke(
                                 controller,
                                 arguments
                         );
 
-                // 7. Traiter le résultat
+                // ------------------------------------
+                // 6. TRAITER LE RESULTAT
+                // ------------------------------------
+
                 if (methodController.isAnnotationPresent(Json.class)) {
 
                     envoyerJson(resultat, resp);
