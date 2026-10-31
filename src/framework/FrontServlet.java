@@ -22,18 +22,13 @@ public class FrontServlet extends HttpServlet {
             HttpServletResponse resp)
             throws IOException {
 
-        resp.setContentType("application/json");
+        resp.setContentType("application/json;charset=UTF-8");
 
         if (resultat instanceof String) {
-
             resp.getWriter().println(resultat);
-
         } else {
-
             Gson gson = new Gson();
-
             String json = gson.toJson(resultat);
-
             resp.getWriter().println(json);
         }
     }
@@ -43,7 +38,7 @@ public class FrontServlet extends HttpServlet {
             HttpServletResponse resp)
             throws ServletException, IOException {
 
-        resp.setContentType("text/plain");
+        resp.setContentType("text/plain;charset=UTF-8");
 
         ServletContext ctx = getServletContext();
 
@@ -52,10 +47,6 @@ public class FrontServlet extends HttpServlet {
 
         HashMap<HttpKey, Mapping> urls =
                 (HashMap<HttpKey, Mapping>) ctx.getAttribute("urls");
-
-        for (Class<?> c : controllers) {
-            resp.getWriter().println(c.getName());
-        }
 
         String url = req.getRequestURI()
                 .substring(req.getContextPath().length());
@@ -70,35 +61,63 @@ public class FrontServlet extends HttpServlet {
 
             try {
 
+                // 1. Instancier le controller
                 Object controller =
                         mapping.getClasse()
                                 .getDeclaredConstructor()
                                 .newInstance();
 
-                // Méthode du controller
+                // 2. Récupérer la méthode du controller
                 java.lang.reflect.Method methodController =
                         mapping.getMethode();
 
-                // Paramètres de la méthode
+                // 3. Récupérer les paramètres de la méthode
                 Parameter[] parameters =
                         methodController.getParameters();
 
-                // Tableau qui contiendra les arguments
+                // 4. Tableau qui contiendra les arguments
                 Object[] arguments =
                         new Object[parameters.length];
 
-                // Construire les arguments
+                // 5. Construire les arguments
                 for (int i = 0; i < parameters.length; i++) {
 
                     Parameter parameter = parameters[i];
 
-                    // Nom et type du paramètre
                     String nomParametre = parameter.getName();
 
                     Class<?> typeParametre = parameter.getType();
 
-                    // Paramètre MapFile : réception d'un fichier
-                    if (typeParametre == MapFile.class) {
+                    // ------------------------------------
+                    // PARAMETRE SESSION
+                    // ------------------------------------
+                    if (typeParametre == Session.class) {
+
+                        // Récupérer la véritable session HTTP
+                        HttpSession httpSession = req.getSession();
+
+                        // Chercher notre objet Session
+                        Session session =
+                                (Session) httpSession.getAttribute("maSession");
+
+                        // Si aucun objet Session n'existe
+                        if (session == null) {
+
+                            // Créer notre objet personnalisé
+                            session = new Session();
+
+                            // Le conserver dans la session HTTP
+                            httpSession.setAttribute("maSession", session);
+                        }
+
+                        // Donner l'objet Session au controller
+                        arguments[i] = session;
+                    }
+
+                    // ------------------------------------
+                    // PARAMETRE MAPFILE : FICHIER
+                    // ------------------------------------
+                    else if (typeParametre == MapFile.class) {
 
                         Part part = req.getPart(nomParametre);
 
@@ -164,15 +183,21 @@ public class FrontServlet extends HttpServlet {
 
                             arguments[i] = fichier;
                         }
+                    }
 
-                    // Paramètre String
-                    } else if (typeParametre == String.class) {
+                    // ------------------------------------
+                    // PARAMETRE STRING
+                    // ------------------------------------
+                    else if (typeParametre == String.class) {
 
                         arguments[i] =
                                 req.getParameter(nomParametre);
+                    }
 
-                    // Paramètre int
-                    } else if (typeParametre == int.class) {
+                    // ------------------------------------
+                    // PARAMETRE INT
+                    // ------------------------------------
+                    else if (typeParametre == int.class) {
 
                         String valeur =
                                 req.getParameter(nomParametre);
@@ -186,17 +211,18 @@ public class FrontServlet extends HttpServlet {
 
                             arguments[i] = 0;
                         }
+                    }
 
-                    // Paramètre objet : fonctionnement actuel conservé
-                    } else {
+                    // ------------------------------------
+                    // PARAMETRE OBJET
+                    // ------------------------------------
+                    else {
 
-                        // Créer une instance de la classe
                         Object objet =
                                 typeParametre
                                         .getDeclaredConstructor()
                                         .newInstance();
 
-                        // Parcourir les propriétés de la classe
                         Field[] champs =
                                 typeParametre.getDeclaredFields();
 
@@ -204,8 +230,7 @@ public class FrontServlet extends HttpServlet {
 
                             String nomChamp = champ.getName();
 
-                            Class<?> typeChamp =
-                                    champ.getType();
+                            Class<?> typeChamp = champ.getType();
 
                             String valeur =
                                     req.getParameter(nomChamp);
@@ -216,7 +241,6 @@ public class FrontServlet extends HttpServlet {
 
                             Object valeurConvertie;
 
-                            // Convertir selon le type de la propriété
                             if (typeChamp == String.class) {
 
                                 valeurConvertie = valeur;
@@ -231,36 +255,33 @@ public class FrontServlet extends HttpServlet {
                                 continue;
                             }
 
-                            // Nom du setter
                             String nomSetter =
                                     "set"
                                     + Character.toUpperCase(
                                             nomChamp.charAt(0))
                                     + nomChamp.substring(1);
 
-                            // Récupérer le setter correspondant
                             java.lang.reflect.Method setter =
                                     typeParametre.getMethod(
                                             nomSetter,
                                             typeChamp
                                     );
 
-                            // Appeler le setter
                             setter.invoke(objet, valeurConvertie);
                         }
 
-                        // Placer l'objet construit dans les arguments
                         arguments[i] = objet;
                     }
                 }
 
-                // Appeler la méthode avec les arguments
+                // 6. Appeler la méthode du controller
                 Object resultat =
                         methodController.invoke(
                                 controller,
                                 arguments
                         );
 
+                // 7. Traiter le résultat
                 if (methodController.isAnnotationPresent(Json.class)) {
 
                     envoyerJson(resultat, resp);
@@ -285,9 +306,7 @@ public class FrontServlet extends HttpServlet {
                             getInitParameter("view-suffix");
 
                     String chemin =
-                            prefix
-                            + mv.getView()
-                            + suffix;
+                            prefix + mv.getView() + suffix;
 
                     RequestDispatcher dispatcher =
                             req.getRequestDispatcher(chemin);
